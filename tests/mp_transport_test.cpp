@@ -8,7 +8,10 @@
 #include "mp_protocol.h"
 #include "mp_transport.h"
 
-#if !defined(_WIN32) && !defined(__EMSCRIPTEN__)
+#if defined(_WIN32)
+#include "platform_win.h"
+#include <winsock2.h>
+#elif !defined(__EMSCRIPTEN__)
 #include <sys/socket.h>
 #endif
 
@@ -112,7 +115,7 @@ TEST_CASE( "mp_transport_drops_corrupt_stream", "[mp][nogame]" )
         WARN( "no network transport on this platform" );
         return;
     }
-#if !defined(_WIN32) && !defined(__EMSCRIPTEN__)
+#if !defined(__EMSCRIPTEN__)
     mp::listener lst;
     std::string err;
     REQUIRE( lst.open( 0, true, err ) );
@@ -124,7 +127,12 @@ TEST_CASE( "mp_transport_drops_corrupt_stream", "[mp][nogame]" )
     // Bypass the framing and write a header that announces a 4 GiB frame.
     // The host must hang up instead of trying to buffer it.
     const char bogus[4] = { '\xff', '\xff', '\xff', '\xff' };
-    REQUIRE( ::send( client->native_handle(), bogus, sizeof( bogus ), 0 ) == 4 );
+#if defined(_WIN32)
+    const SOCKET raw = static_cast<SOCKET>( client->native_handle() );
+#else
+    const int raw = static_cast<int>( client->native_handle() );
+#endif
+    REQUIRE( ::send( raw, bogus, sizeof( bogus ), 0 ) == 4 );
     CHECK_FALSE( receive( *server, *client, 1000 ).has_value() );
     CHECK_FALSE( server->is_open() );
     CHECK( server->close_reason().rfind( "protocol error", 0 ) == 0 );

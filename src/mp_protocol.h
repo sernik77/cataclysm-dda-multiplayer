@@ -8,9 +8,11 @@
 #include <string>
 #include <vector>
 
+#include "mp_framing.h"
 #include "mp_scheduler.h"
 
-// Multiplayer wire protocol: framing, message types and validation.
+// Multiplayer wire protocol: message types and validation. Framing lives
+// in mp_framing.h.
 // See doc/c++/MULTIPLAYER.md, section 5.
 //
 // A frame is a 4-byte big-endian payload length followed by a UTF-8 JSON
@@ -22,42 +24,10 @@ namespace mp
 
 // Bump when the wire format changes incompatibly.
 constexpr int protocol_version = 1;
-constexpr std::uint32_t max_frame_bytes = 16U * 1024U * 1024U;
 constexpr size_t max_name_bytes = 32;
 constexpr size_t max_chat_bytes = 512;
 constexpr size_t max_activity_bytes = 64U * 1024U;
 constexpr size_t max_reason_bytes = 256;
-
-std::string encode_frame( const std::string &payload );
-
-// Splits a byte stream into frames. Handles frames that arrive in pieces.
-class frame_decoder
-{
-    public:
-        explicit frame_decoder( std::uint32_t max_frame = max_frame_bytes ) : max_frame_( max_frame ) {}
-
-        // Appends bytes. Returns false once the stream is corrupt (a frame
-        // longer than the limit); the connection must then be closed.
-        bool feed( const char *data, size_t len );
-        // Returns the next complete payload, if any.
-        std::optional<std::string> next();
-
-        bool failed() const {
-            return !error_.empty();
-        }
-        const std::string &error() const {
-            return error_;
-        }
-        size_t buffered() const {
-            return buf_.size() - pos_;
-        }
-
-    private:
-        std::uint32_t max_frame_;
-        std::string buf_;
-        size_t pos_ = 0;
-        std::string error_;
-};
 
 // --- Messages ---------------------------------------------------------------
 
