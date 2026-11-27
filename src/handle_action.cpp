@@ -71,6 +71,7 @@
 #include "messages.h"
 #include "monster.h"
 #include "move_mode.h"
+#include "mp_host.h"
 #include "mtype.h"
 #include "mutation.h"
 #include "options.h"
@@ -200,7 +201,8 @@ class user_turn
         }
 
         bool has_timeout_elapsed() {
-            return moves_elapsed() > 100;
+            // Multiplayer: the turn scheduler may end the host's turn.
+            return mp::host_turn_timed_out() || moves_elapsed() > 100;
         }
 
         int moves_elapsed() {
@@ -2314,7 +2316,9 @@ bool game::do_regular_action( action_id &act, avatar &player_character,
             break;
 
         case ACTION_TIMEOUT:
-            if( check_safe_mode_allowed( false ) ) {
+            // In multiplayer the scheduler decides, so an idle host can not
+            // freeze the game for everyone even while safe mode is on.
+            if( mp::host_turn_timed_out() || check_safe_mode_allowed( false ) ) {
                 player_character.pause();
             }
             break;

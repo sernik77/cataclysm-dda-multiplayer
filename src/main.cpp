@@ -52,6 +52,7 @@
 #include "main_menu.h"
 #include "mapsharing.h"
 #include "memory_fast.h"
+#include "mp_host.h"
 #include "options.h"
 #include "ordered_static_globals.h"
 #include "output.h"
@@ -281,7 +282,21 @@ struct cli_opts {
     std::vector<std::string> opts;
     std::string world; /** if set try to load first save in this world on startup */
     bool disable_ascii_art = false;
+    bool mp_host = false;
+    mp::host_options mp;
 };
+
+// Parses a positive integer flag value; exits with a message on bad input.
+static long parse_positive_flag( const char *flag, const char *value, long max )
+{
+    char *end = nullptr;
+    const long v = std::strtol( value, &end, 10 );
+    if( end == value || *end != '\0' || v < 1 || v > max ) {
+        fprintf( stderr, "%s: expected a number from 1 to %ld, got '%s'\n", flag, max, value );
+        exit( 1 );
+    }
+    return v;
+}
 
 cli_opts parse_commandline( int argc, const char **argv )
 {
@@ -291,6 +306,7 @@ cli_opts parse_commandline( int argc, const char **argv )
     constexpr std::string_view section_map_sharing = "Map sharing";
     constexpr std::string_view section_user_directory = "User directories";
     constexpr std::string_view section_accessibility = "Accessibility";
+    constexpr std::string_view section_multiplayer = "Multiplayer (experimental)";
     const std::vector<arg_handler> first_pass_arguments = {{
             {
                 "--seed", "<string of letters and or numbers>",
@@ -434,6 +450,59 @@ cli_opts parse_commandline( int argc, const char **argv )
                     result.disable_ascii_art = true;
                     return 0;
                 }
+            },
+            {
+                "--mp-host", "<port>",
+                "Host a co-op game on this TCP port once a game is loaded",
+                section_multiplayer,
+                1,
+                [&result]( int, const char **params ) -> int {
+                    result.mp_host = true;
+                    result.mp.port = static_cast<std::uint16_t>(
+                        parse_positive_flag( "--mp-host", params[0], 65535 ) );
+                    return 1;
+                }
+            },
+            {
+                "--mp-password", "<secret>",
+                "Require this password from joining players",
+                section_multiplayer,
+                1,
+                [&result]( int, const char **params ) -> int {
+                    result.mp.password = params[0];
+                    return 1;
+                }
+            },
+            {
+                "--mp-pace", "<ms>",
+                "Explore mode: longest wait for a player per turn (default 250)",
+                section_multiplayer,
+                1,
+                [&result]( int, const char **params ) -> int {
+                    result.mp.sched.pace_ms = parse_positive_flag( "--mp-pace", params[0], 60000 );
+                    return 1;
+                }
+            },
+            {
+                "--mp-grace", "<ms>",
+                "Tactical mode: wait this long before an idle player auto-pauses (default 30000)",
+                section_multiplayer,
+                1,
+                [&result]( int, const char **params ) -> int {
+                    result.mp.sched.tactical_grace_ms = parse_positive_flag( "--mp-grace", params[0],
+                            3600000 );
+                    return 1;
+                }
+            },
+            {
+                "--mp-loopback", {},
+                "Accept co-op players from this computer only",
+                section_multiplayer,
+                0,
+                [&result]( int, const char ** ) -> int {
+                    result.mp.loopback_only = true;
+                    return 0;
+                }
             }
         }
     };
@@ -550,6 +619,10 @@ cli_opts parse_commandline( int argc, const char **argv )
 
     process_args( argv, argc, first_pass_arguments );
     process_args( argv, argc, second_pass_arguments );
+
+    if( result.mp_host ) {
+        mp::request_host( result.mp );
+    }
 
     return result;
 }
