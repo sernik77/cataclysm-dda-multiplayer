@@ -61,7 +61,7 @@ jobs:
       - name: Install dependencies
         run: |
           pacman -Syu --noconfirm --needed git pkgconf ncurses zlib freetype2 \
-            sdl3 sdl3_image sdl3_ttf sdl3_mixer python
+            sdl3 sdl3_image sdl3_ttf sdl3_mixer python glslang
           useradd -m builder
       - uses: actions/checkout@v4
         with:
