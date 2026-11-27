@@ -17,7 +17,7 @@ arch=('x86_64' 'aarch64')
 url="https://github.com/sernik77/${_reponame}"
 license=('CC-BY-SA-3.0')
 depends=('glibc' 'gcc-libs' 'ncurses' 'zlib' 'freetype2'
-         'sdl2' 'sdl2_image' 'sdl2_ttf' 'sdl2_mixer')
+         'sdl3' 'sdl3_image' 'sdl3_ttf' 'sdl3_mixer')
 makedepends=('git' 'pkgconf')
 optdepends=('python: cataclysm-mp-probe test client')
 provides=('cataclysm-dda')

@@ -70,6 +70,37 @@ jobs:
           ./result/bin/cataclysm --help | head -n 5
           ./result/bin/cataclysm-mp-probe --help | head -n 3
 
+  arch:
+    name: Arch PKGBUILD (makepkg, tiles + curses)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    container: archlinux:base-devel
+    steps:
+      - name: Install dependencies
+        run: |
+          pacman -Syu --noconfirm --needed git pkgconf ncurses zlib freetype2 \
+            sdl3 sdl3_image sdl3_ttf sdl3_mixer python
+          useradd -m builder
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - name: makepkg
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          mkdir -p /tmp/pkg && cp packaging/arch/PKGBUILD /tmp/pkg/
+          chown -R builder "$GITHUB_WORKSPACE" /tmp/pkg
+          cd /tmp/pkg
+          sudo -u builder env \
+            CDDA_MP_SOURCE="git+file://$GITHUB_WORKSPACE#commit=$(git -C "$GITHUB_WORKSPACE" rev-parse HEAD)" \
+            MAKEFLAGS="-j$(nproc)" makepkg --noconfirm
+      - name: Inspect package
+        run: |
+          pkg=$(ls /tmp/pkg/*.pkg.tar.zst | grep -v debug)
+          tar -tf "$pkg" | grep -E 'usr/bin/|completions|site-functions|vendor_completions|licenses|doc/' | sort
+          pacman -U --noconfirm "$pkg"
+          cataclysm --help | head -n 3
+          cataclysm-mp-probe --help | head -n 3
+
   windows:
     name: Windows native transport (MSVC)
     runs-on: windows-latest

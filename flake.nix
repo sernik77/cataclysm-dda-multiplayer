@@ -22,6 +22,10 @@
       ];
 
       mkCdda = pkgs: { tiles }:
+        let
+          # Sound needs SDL3_mixer; build without it where nixpkgs lacks it.
+          sound = pkgs ? sdl3-mixer;
+        in
         pkgs.stdenv.mkDerivation {
           pname = if tiles then "cataclysm-dda-mp-tiles" else "cataclysm-dda-mp";
           version = "0-unstable-${self.shortRev or self.dirtyShortRev or "dirty"}";
@@ -29,13 +33,13 @@
 
           nativeBuildInputs = [ pkgs.pkg-config ];
           buildInputs = [ pkgs.ncurses pkgs.zlib pkgs.python3 ] ++ pkgs.lib.optionals tiles [
-            pkgs.SDL2 pkgs.SDL2_image pkgs.SDL2_ttf pkgs.SDL2_mixer pkgs.freetype
-          ];
+            pkgs.sdl3 pkgs.sdl3-image pkgs.sdl3-ttf pkgs.freetype
+          ] ++ pkgs.lib.optionals (tiles && sound) [ pkgs.sdl3-mixer ];
 
           enableParallelBuilding = true;
           # There is no .git in the Nix source, so name the version here.
           makeFlags = makeFlags ++ [ "PREFIX=$(out)" "VERSION=${self.shortRev or "dirty"}-mp" ]
-            ++ (if tiles then [ "TILES=1" "SOUND=1" ] else [ "TILES=0" "SOUND=0" ]);
+            ++ [ (if tiles then "TILES=1" else "TILES=0") (if tiles && sound then "SOUND=1" else "SOUND=0") ];
 
           postInstall = ''
             install -Dm755 tools/mp/mp_probe.py $out/bin/cataclysm-mp-probe
