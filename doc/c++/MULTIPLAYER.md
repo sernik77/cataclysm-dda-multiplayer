@@ -97,22 +97,27 @@ never applied half-way.
 ### 4.1 Tempo modes
 
 There is one clock and three ways to drive it. The **mode is chosen per tick**
-from the state of all players (`mp_scheduler::compute_mode()`):
+from the state of all players (`mp::scheduler::mode()`):
 
 | Mode | When | How the clock moves |
 |---|---|---|
-| **TACTICAL** | Any player is in danger: a hostile is visible to them (the same test that drives safe mode, `mostseen`), they took damage recently, or they toggled tactical mode manually. | Strict turns. A turn ends only when every *input* player has spent their moves. A configurable grace timeout (default 30 s) auto-pauses an AFK player, so one disconnected or AFK friend cannot lock the game forever. |
+| **TACTICAL** | Any player is in danger: a hostile creature within 60 tiles is visible to them (`Character::get_hostile_creatures()`), or they toggled tactical mode manually. | Strict turns. A turn ends only when every *input* player has spent their moves. A configurable grace timeout (default 30 s) auto-pauses an AFK player, so one disconnected or AFK friend cannot lock the game forever. |
 | **EXPLORE** | Nobody is in danger, and at least one player is giving input. | Soft real time. A turn ends as soon as every input player has acted, **or** when the pace interval runs out (default 250 ms per turn). A player who does not act in time pauses for that turn, as `TURN_DURATION` already does in single player. Fast players are never throttled below their own key-repeat speed if everyone else is busy. |
 | **FAST_FORWARD** | Every player is *busy*: in a long activity, asleep, waiting, travelling, or has pressed **ready**. | No waiting. Turns run back to back at engine speed, exactly like single player waiting or crafting. |
 
-Each player is in one of these **player states** (`mp_player_state`), which the
-host derives every turn:
+Each player is in one of these **player states** (`mp::player_state`), which
+the host derives every turn:
 
 * `input`: idle and expected to choose an action.
-* `busy`: an activity, sleep, wait or auto-move consumes their moves. They need
-  no input.
+* `busy`: an activity, sleep or auto-move consumes their moves. They need no
+  input.
 * `ready`: they explicitly said "skip time with me" (see §4.3).
-* `danger`: `input`, and something hostile threatens them.
+
+**Danger** is a separate flag, not a state: a busy player can be in danger too.
+A danger report lasts `danger_linger_turns` turns (default 5), so a monster
+that steps in and out of view does not switch the mode on every turn. When the
+group enters danger, every `ready` vote is cancelled, and new votes are refused
+until the danger is over.
 
 ### 4.2 The turn barrier
 
@@ -131,10 +136,16 @@ deadline(player) = busy/ready   -> 0         (never waits)
                    TACTICAL     -> tactical_grace_ms    (default 30000)
 ```
 
-Inside one turn, commands are executed **in arrival order** while the player
-still has moves. This mirrors single player, where the avatar spends all its
-moves and then the monsters act. Any advantage from typing faster is limited to
-one turn.
+Inside one turn, each player's commands are executed **in arrival order**
+while that player still has moves. This mirrors single player, where the avatar
+spends all its moves and then the monsters act. Any advantage from typing faster
+is limited to one turn.
+
+In v1 the order inside a turn follows the engine: the host avatar acts first
+(in `game::do_turn()`), then the puppets act in NPC order (in
+`process_npc_turn()`), then the monsters. Commands that a remote player sends
+while the host is still choosing are queued and run when the puppet's turn
+comes.
 
 ### 4.3 How this solves the long-activity problem
 
@@ -243,9 +254,9 @@ it.
    Pure logic with unit tests (`tests/mp_scheduler_test.cpp`).
 2. **Protocol + transport (done).** `mp_protocol` (framing, envelope, handshake
    validation) and `mp_transport` (POSIX TCP, non-blocking), with a loopback test.
-3. **Host loop integration.** Remote puppets in `process_npc_turn()`, the barrier
-   in `game::do_turn()`, and the scheduler feeding `TURN_DURATION` for the host
-   input. All behind the `MULTIPLAYER` option, so single player is unchanged.
+3. **Host loop integration (done).** Remote puppets in `process_npc_turn()`, the barrier
+   in `game::do_turn()`, and the scheduler ending the host's turn through the existing
+   input timeout (`ACTION_TIMEOUT`). All behind `--mp-host`, so single player is unchanged.
 4. **Thin client.** Mirror state, primitive commands, then activity commands.
 5. **Persistence and rejoin.** Puppet binding by player id.
 6. **Polish.** Status line, danger broadcast, chat, group-skip voting.
@@ -255,11 +266,43 @@ it.
 
 | Component | Files | State |
 |---|---|---|
-| Scheduler | `src/mp_scheduler.{h,cpp}` | Implemented, unit-tested |
-| Protocol | `src/mp_protocol.{h,cpp}` | Implemented, unit-tested |
-| Transport | `src/mp_transport.{h,cpp}` | POSIX implemented, loopback-tested. On Windows it compiles to a stub that reports "unsupported". |
-| Host integration | – | Not started |
-| Client | – | Not started |
+| Scheduler | `src/mp_scheduler.{h,cpp}` | Done, unit-tested |
+| Protocol | `src/mp_protocol.{h,cpp}` | Done, unit-tested |
+| Transport | `src/mp_transport.{h,cpp}` | POSIX done, loopback-tested. Windows and Emscripten build a stub that reports "not supported". |
+| Host session | `src/mp_host.{h,cpp}` | Handshake (version, mod fingerprint, optional password), puppet spawn and rebind by player uuid, command queue, scheduler barrier, host input timeout, disconnect handling. Tested against a real game state (`tests/mp_host_test.cpp`). |
+| Engine hooks | `do_turn.cpp`, `handle_action.cpp`, `main.cpp` | Three small hooks. Each is a no-op unless `--mp-host` was given. |
+| Commands | | `move` (also melee attack), `wait`, `pause`, `ready`, `unready`, `tactical_on/off`. Not yet: z-level moves, `activity`. |
+| Client state | | Only a short `self` status (position, hp, moves, activity, danger). The full mirror (character and submap JSON) is milestone 4. |
+| Test client | `tools/mp/mp_probe.py` | Text client (Python standard library) for manual testing. |
+| Persistence, tether, status UI | | Not started. Moves that would leave the reality bubble are refused. |
+
+### Running it
+
+```sh
+./cataclysm --mp-host 7777            # then load or start a game
+python3 tools/mp/mp_probe.py --port 7777 --name Bartek --auto
+```
+
+| Flag | Meaning |
+|---|---|
+| `--mp-host <port>` | Host a co-op game on this TCP port once a game is loaded. |
+| `--mp-password <secret>` | Joining players must send this password. |
+| `--mp-pace <ms>` | EXPLORE: the longest a turn waits for a player (default 250). |
+| `--mp-grace <ms>` | TACTICAL: wait this long before an idle player auto-pauses (default 30000). |
+| `--mp-loopback` | Accept players from this computer only. |
+
+The host listens on all interfaces unless `--mp-loopback` is given. Use
+`--mp-password` on any network that you do not trust; the connection itself is
+not encrypted.
+
+### Known limitations of the prototype
+
+* The puppet is a random NPC character named after the player. Bringing your
+  own character comes with the client mirror.
+* While the host waits for a remote player in TACTICAL mode, the host's screen
+  does not update. The wait is limited by `--mp-grace`.
+* Player bindings (uuid to character) are kept in memory only. After the host
+  restarts the game, a returning player gets a new character.
 
 ## License
 

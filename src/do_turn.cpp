@@ -53,6 +53,7 @@
 #include "messages.h"
 #include "mission.h"
 #include "monster.h"
+#include "mp_host.h"
 #include "mtype.h"
 #include "music.h"
 #include "npc.h"
@@ -288,6 +289,13 @@ npc_turn_result process_npc_turn( map &m, npc &guy )
     m.creature_in_field( guy );
     if( !guy.has_effect( effect_npc_suspend ) ) {
         guy.process_turn();
+    }
+    // Multiplayer: a remote player's puppet acts on network commands, not AI.
+    if( mp::run_puppet_turn_hook( guy ) ) {
+        if( !guy.is_dead() ) {
+            guy.npc_update_body();
+        }
+        return result;
     }
     while( !guy.is_dead() && ( !guy.in_sleep_state() ||
                                guy.activity.id() == ACT_OPERATION || guy.activity.id() == ACT_MIGRATION_CANCEL ) &&
@@ -572,6 +580,8 @@ bool game::do_turn()
         get_craft_reservations().sweep_expired_records();
     }
     mission::process_all();
+    // Multiplayer: start the scheduler turn and sync remote players.
+    mp::on_turn_start();
     avatar &u = get_avatar();
     map &m = get_map();
     // If controlling a vehicle that is owned by someone else

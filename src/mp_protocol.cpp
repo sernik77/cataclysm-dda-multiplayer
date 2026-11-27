@@ -135,9 +135,49 @@ std::string sanitize_text( const std::string &text, size_t max_bytes )
     return out;
 }
 
-std::optional<std::string> check_hello( const hello_msg &h, const std::string &game_version,
-                                        const std::string &mods_hash )
+std::string mods_fingerprint( const std::vector<std::string> &mod_ids )
 {
+    std::uint64_t hash = 14695981039346656037ULL;
+    const auto mix = [&hash]( unsigned char c ) {
+        hash ^= c;
+        hash *= 1099511628211ULL;
+    };
+    for( const std::string &id : mod_ids ) {
+        for( const char ch : id ) {
+            mix( static_cast<unsigned char>( ch ) );
+        }
+        // Separator, so ["ab","c"] and ["a","bc"] differ.
+        mix( 0 );
+    }
+    static const char digits[] = "0123456789abcdef";
+    std::string out( 16, '0' );
+    for( int i = 15; i >= 0; --i ) {
+        out[i] = digits[hash & 0xFU];
+        hash >>= 4;
+    }
+    return out;
+}
+
+// Compares without an early exit, so the time taken does not reveal how much
+// of the secret matched.
+static bool same_secret( const std::string &a, const std::string &b )
+{
+    unsigned char diff = a.size() == b.size() ? 0 : 1;
+    const size_t n = std::max( a.size(), b.size() );
+    for( size_t i = 0; i < n; ++i ) {
+        const unsigned char ca = i < a.size() ? static_cast<unsigned char>( a[i] ) : 0;
+        const unsigned char cb = i < b.size() ? static_cast<unsigned char>( b[i] ) : 0;
+        diff |= ca ^ cb;
+    }
+    return diff == 0;
+}
+
+std::optional<std::string> check_hello( const hello_msg &h, const std::string &game_version,
+                                        const std::string &mods_hash, const std::string &password )
+{
+    if( !password.empty() && !same_secret( h.password, password ) ) {
+        return "wrong password";
+    }
     if( h.proto != protocol_version ) {
         return "protocol version mismatch: host " + std::to_string( protocol_version ) +
                ", client " + std::to_string( h.proto );
@@ -147,7 +187,7 @@ std::optional<std::string> check_hello( const hello_msg &h, const std::string &g
                sanitize_text( h.game_version, 64 );
     }
     if( h.mods_hash != mods_hash ) {
-        return "mod list mismatch";
+        return "mod list mismatch: host " + mods_hash;
     }
     if( !valid_player_name( h.name ) ) {
         return "invalid player name";
@@ -288,6 +328,9 @@ std::string serialize( const hello_msg &m )
         j.member( "mods_hash", m.mods_hash );
         j.member( "name", m.name );
         j.member( "player_uuid", m.player_uuid );
+        if( !m.password.empty() ) {
+            j.member( "password", m.password );
+        }
     } );
 }
 
@@ -365,6 +408,21 @@ std::string serialize( const bye_msg &m )
     } );
 }
 
+std::string serialize( const self_msg &m )
+{
+    return write_message( "self", [&]( JsonOut & j ) {
+        j.member( "turn", m.turn );
+        j.member( "x", m.x );
+        j.member( "y", m.y );
+        j.member( "z", m.z );
+        j.member( "hp", m.hp );
+        j.member( "hp_max", m.hp_max );
+        j.member( "moves", m.moves );
+        j.member( "activity", m.activity );
+        j.member( "danger", m.danger );
+    } );
+}
+
 // --- Parsing ----------------------------------------------------------------
 
 std::optional<std::string> message_type( const std::string &payload )
@@ -413,6 +471,10 @@ std::string parse( const std::string &payload, hello_msg &out )
         }
         if( err.empty() ) {
             err = read_string( jo, "player_uuid", out.player_uuid, 64 );
+        }
+        out.password.clear();
+        if( err.empty() && jo.has_member( "password" ) ) {
+            err = read_string( jo, "password", out.password, 128 );
         }
         return err;
     } );
@@ -556,6 +618,38 @@ std::string parse( const std::string &payload, bye_msg &out )
     return read_message( payload, "bye", [&]( const JsonObject & jo ) {
         std::string err = read_string( jo, "reason", out.reason, max_frame_bytes );
         out.reason = sanitize_text( out.reason, max_reason_bytes );
+        return err;
+    } );
+}
+
+std::string parse( const std::string &payload, self_msg &out )
+{
+    return read_message( payload, "self", [&]( const JsonObject & jo ) {
+        std::int64_t v[7] = {};
+        const char *keys[7] = { "turn", "x", "y", "z", "hp", "hp_max", "moves" };
+        for( int i = 0; i < 7; ++i ) {
+            std::string err = read_int64( jo, keys[i], v[i] );
+            if( !err.empty() ) {
+                return err;
+            }
+            if( i > 0 && ( v[i] < INT32_MIN || v[i] > INT32_MAX ) ) {
+                return std::string( "'" ) + keys[i] + "' out of range";
+            }
+        }
+        out.turn = v[0];
+        out.x = static_cast<int>( v[1] );
+        out.y = static_cast<int>( v[2] );
+        out.z = static_cast<int>( v[3] );
+        out.hp = static_cast<int>( v[4] );
+        out.hp_max = static_cast<int>( v[5] );
+        out.moves = static_cast<int>( v[6] );
+        std::string err = read_string( jo, "activity", out.activity, 128 );
+        if( err.empty() ) {
+            if( !jo.has_bool( "danger" ) ) {
+                return std::string( "missing bool 'danger'" );
+            }
+            out.danger = jo.get_bool( "danger" );
+        }
         return err;
     } );
 }

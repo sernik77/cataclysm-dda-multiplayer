@@ -68,6 +68,8 @@ struct hello_msg {
     std::string name;
     // Stable id kept by the client, used to rebind to the same character.
     std::string player_uuid;
+    // Shared secret; empty when the host has none.
+    std::string password;
 };
 
 struct welcome_msg {
@@ -127,6 +129,21 @@ struct bye_msg {
     std::string reason;
 };
 
+// Short status of the player's own character. The full mirror (character and
+// submap JSON) replaces this in the thin-client milestone.
+struct self_msg {
+    std::int64_t turn = 0;
+    // Absolute map-square position.
+    int x = 0;
+    int y = 0;
+    int z = 0;
+    int hp = 0;
+    int hp_max = 0;
+    int moves = 0;
+    std::string activity;
+    bool danger = false;
+};
+
 std::string serialize( const hello_msg &m );
 std::string serialize( const welcome_msg &m );
 std::string serialize( const reject_msg &m );
@@ -135,6 +152,7 @@ std::string serialize( const command_ack_msg &m );
 std::string serialize( const tick_msg &m );
 std::string serialize( const chat_msg &m );
 std::string serialize( const bye_msg &m );
+std::string serialize( const self_msg &m );
 
 // Returns the "t" member of a payload, or nullopt if it is not a JSON object
 // with a string "t".
@@ -149,6 +167,7 @@ std::string parse( const std::string &payload, command_ack_msg &out );
 std::string parse( const std::string &payload, tick_msg &out );
 std::string parse( const std::string &payload, chat_msg &out );
 std::string parse( const std::string &payload, bye_msg &out );
+std::string parse( const std::string &payload, self_msg &out );
 
 // --- Validation -------------------------------------------------------------
 
@@ -157,10 +176,15 @@ bool valid_player_name( const std::string &name );
 // Removes control characters (keeps valid UTF-8 bytes) and truncates.
 std::string sanitize_text( const std::string &text, size_t max_bytes );
 
+// Stable fingerprint of a mod list (FNV-1a 64, hex). Order matters, because
+// load order changes the game data.
+std::string mods_fingerprint( const std::vector<std::string> &mod_ids );
+
 // What the host requires from a joining client. Returns the reason to reject,
 // or nullopt to accept.
 std::optional<std::string> check_hello( const hello_msg &h, const std::string &game_version,
-                                        const std::string &mods_hash );
+                                        const std::string &mods_hash,
+                                        const std::string &password = std::string() );
 
 } // namespace mp
 

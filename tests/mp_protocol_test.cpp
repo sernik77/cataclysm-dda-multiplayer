@@ -203,7 +203,7 @@ TEST_CASE( "mp_hello_validation", "[mp][nogame]" )
     CHECK( mp::check_hello( bad, "v1", "m" ).has_value() );
     bad = h;
     bad.mods_hash = "other";
-    CHECK( mp::check_hello( bad, "v1", "m" ) == std::optional<std::string>( "mod list mismatch" ) );
+    CHECK( mp::check_hello( bad, "v1", "m" ) == std::optional<std::string>( "mod list mismatch: host m" ) );
     bad = h;
     bad.name = "   ";
     CHECK( mp::check_hello( bad, "v1", "m" ).has_value() );
@@ -224,4 +224,55 @@ TEST_CASE( "mp_sanitize_text_keeps_utf8_whole", "[mp][nogame]" )
     CHECK( mp::sanitize_text( "aż", 3 ) == "aż" );
     CHECK( mp::sanitize_text( "a\x01\x7f" "b", 10 ) == "ab" );
     CHECK( mp::sanitize_text( "", 5 ).empty() );
+}
+
+TEST_CASE( "mp_self_and_password", "[mp][nogame]" )
+{
+    mp::self_msg m;
+    m.turn = 5260000;
+    m.x = -1234;
+    m.y = 99;
+    m.z = -2;
+    m.hp = 80;
+    m.hp_max = 84;
+    m.moves = -20;
+    m.activity = "ACT_CHOP_TREE";
+    m.danger = true;
+    mp::self_msg m2;
+    REQUIRE( mp::parse( mp::serialize( m ), m2 ).empty() );
+    CHECK( m2.turn == m.turn );
+    CHECK( m2.x == -1234 );
+    CHECK( m2.y == 99 );
+    CHECK( m2.z == -2 );
+    CHECK( m2.hp == 80 );
+    CHECK( m2.hp_max == 84 );
+    CHECK( m2.moves == -20 );
+    CHECK( m2.activity == m.activity );
+    CHECK( m2.danger );
+
+    mp::hello_msg h;
+    h.game_version = "v";
+    h.mods_hash = "m";
+    h.name = "Ala";
+    h.player_uuid = "u1";
+    h.password = "sekret";
+    mp::hello_msg h2;
+    REQUIRE( mp::parse( mp::serialize( h ), h2 ).empty() );
+    CHECK( h2.password == "sekret" );
+    CHECK_FALSE( mp::check_hello( h2, "v", "m", "sekret" ).has_value() );
+    CHECK( mp::check_hello( h2, "v", "m", "sekre" ) == std::optional<std::string>( "wrong password" ) );
+    // No password on the host: any client password is accepted.
+    CHECK_FALSE( mp::check_hello( h2, "v", "m" ).has_value() );
+}
+
+TEST_CASE( "mp_mods_fingerprint", "[mp][nogame]" )
+{
+    const std::string base = mp::mods_fingerprint( { "dda", "no_npc_food" } );
+    CHECK( base.size() == 16 );
+    CHECK( base == mp::mods_fingerprint( { "dda", "no_npc_food" } ) );
+    // Order and boundaries matter.
+    CHECK( base != mp::mods_fingerprint( { "no_npc_food", "dda" } ) );
+    CHECK( mp::mods_fingerprint( { "ab", "c" } ) != mp::mods_fingerprint( { "a", "bc" } ) );
+    // Known value: FNV-1a 64 of the empty input.
+    CHECK( mp::mods_fingerprint( {} ) == "cbf29ce484222325" );
 }
