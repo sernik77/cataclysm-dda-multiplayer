@@ -1,5 +1,24 @@
 # Cataclysm: Dark Days Ahead
 
+> **This is the co-op multiplayer fork** ([sernik77/cataclysm-dda-multiplayer](https://github.com/sernik77/cataclysm-dda-multiplayer)).
+>
+> [![Multiplayer CI](https://github.com/sernik77/cataclysm-dda-multiplayer/actions/workflows/mp.yml/badge.svg)](https://github.com/sernik77/cataclysm-dda-multiplayer/actions/workflows/mp.yml)
+> [![License: CC BY-SA 3.0](https://img.shields.io/badge/License-CC%20BY--SA%203.0-lightgrey.svg)](LICENSE.txt)
+> ![Status: experimental](https://img.shields.io/badge/status-experimental-750f0f.svg)
+>
+> The host's game is the world, and friends join over TCP. One shared clock runs in three tempo
+> modes: strict turns while anyone is in danger, soft real time while exploring, and full speed
+> while everybody is busy. A friend's 2000-turn activity never freezes your turn.
+> Design and status: [doc/c++/MULTIPLAYER.md](doc/c++/MULTIPLAYER.md).
+>
+> ```sh
+> ./cataclysm --mp-host 7777                      # host, then start or load a game
+> python3 tools/mp/mp_probe.py --port 7777 --auto  # test client
+> ```
+>
+> Packages: `packaging/arch/PKGBUILD` (Arch); a Windows `.exe` build is attached to every CI run (`cdda-mp-windows`).
+> Co-op is not yet playable from the client side: the client mirror is the next milestone.
+
 Cataclysm: Dark Days Ahead is a turn-based survival game set in a post-apocalyptic world. While some have described it as a "zombie game", there is far more to Cataclysm than that. Struggle to survive in a harsh, persistent, procedurally generated world. Scavenge the remnants of a dead civilization for food, equipment, or, if you are lucky, a vehicle with a full tank of gas to get you the hell out of Dodge. Fight to defeat or escape from a wide variety of powerful monstrosities, from zombies to giant insects to killer robots and things far stranger and deadlier, and against the others like yourself, who want what you have...
 
 <p align="center">
