@@ -24,6 +24,8 @@ provides=('cataclysm-dda')
 conflicts=('cataclysm-dda' 'cataclysm-dda-tiles')
 source=("${_reponame}::${CDDA_MP_SOURCE:-git+${url}.git#branch=master}")
 sha256sums=('SKIP')
+# LTO over the whole game takes very long and gains little.
+options=('!lto')
 
 _makeflags=(
   PREFIX=/usr
@@ -32,6 +34,7 @@ _makeflags=(
   LTO=0
   LOCALIZE=0
   BACKTRACE=0
+  TESTS=0
   RUNTESTS=0
   LINTJSON=0
   ASTYLE=0
@@ -47,6 +50,8 @@ build() {
   cd "${_reponame}"
   # The Makefile adds its own optimisation flags.
   export CXXFLAGS="${CXXFLAGS/-O2/}"
+  # prefix.h and version.h are generated only by these targets.
+  make "${_makeflags[@]}" TILES=0 SOUND=0 version prefix
   make "${_makeflags[@]}" TILES=0 SOUND=0 cataclysm
   make "${_makeflags[@]}" TILES=1 SOUND=1 cataclysm-tiles
 }

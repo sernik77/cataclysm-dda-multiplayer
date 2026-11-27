@@ -14,6 +14,7 @@
         "LTO=0"
         "LOCALIZE=0"
         "BACKTRACE=0"
+        "TESTS=0"
         "RUNTESTS=0"
         "LINTJSON=0"
         "ASTYLE=0"
