@@ -1,0 +1,53 @@
+name: Multiplayer
+
+# CI for the co-op fork: builds the curses game and the test binary on Linux,
+# then runs the multiplayer tests and the engine tests that touch the hooks.
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+concurrency:
+  group: mp-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux:
+    name: Linux build + [mp] tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    env:
+      MAKE_OPTS: >-
+        RELEASE=1 TILES=0 SOUND=0 LOCALIZE=0 BACKTRACE=0 LINTJSON=0
+        ASTYLE=0 RUNTESTS=0 CCACHE=1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libncursesw5-dev zlib1g-dev ccache python3
+
+      - name: ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: linux-curses-release
+          max-size: 2G
+
+      - name: Build game and tests
+        run: make -j"$(nproc)" $MAKE_OPTS cataclysm tests
+
+      - name: Multiplayer tests
+        run: ./tests/cata_test --rng-seed time '[mp]'
+
+      - name: Engine tests around the hooks
+        run: ./tests/cata_test --rng-seed time '[npc],[monster],[activity]'
+
+      - name: Probe client syntax
+        run: python3 -I -m py_compile tools/mp/mp_probe.py
