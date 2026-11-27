@@ -1,0 +1,78 @@
+# Maintainer: sernik77 <https://github.com/sernik77>
+#
+# Cataclysm: Dark Days Ahead with experimental co-op multiplayer.
+# Builds the tiles and the curses game from the fork's master branch.
+#
+#   cd packaging/arch && makepkg -si
+#
+# To build from a local checkout instead of cloning the fork, set
+#   CDDA_MP_SOURCE=git+file:///path/to/checkout#branch=master
+
+pkgname=cataclysm-dda-mp-git
+_reponame=cataclysm-dda-multiplayer
+pkgver=r0.0000000
+pkgrel=1
+pkgdesc="Cataclysm: Dark Days Ahead with experimental co-op multiplayer (tiles and curses)"
+arch=('x86_64' 'aarch64')
+url="https://github.com/sernik77/${_reponame}"
+license=('CC-BY-SA-3.0')
+depends=('glibc' 'gcc-libs' 'ncurses' 'zlib' 'freetype2'
+         'sdl2' 'sdl2_image' 'sdl2_ttf' 'sdl2_mixer')
+makedepends=('git' 'pkgconf')
+optdepends=('python: cataclysm-mp-probe test client')
+provides=('cataclysm-dda')
+conflicts=('cataclysm-dda' 'cataclysm-dda-tiles')
+source=("${_reponame}::${CDDA_MP_SOURCE:-git+${url}.git#branch=master}")
+sha256sums=('SKIP')
+
+_makeflags=(
+  PREFIX=/usr
+  USE_XDG_DIR=1
+  RELEASE=1
+  LTO=0
+  LOCALIZE=0
+  BACKTRACE=0
+  RUNTESTS=0
+  LINTJSON=0
+  ASTYLE=0
+  PCH=0
+)
+
+pkgver() {
+  cd "${_reponame}"
+  printf "r%s.%s" "$(git rev-list --count HEAD)" "$(git rev-parse --short=7 HEAD)"
+}
+
+build() {
+  cd "${_reponame}"
+  # The Makefile adds its own optimisation flags.
+  export CXXFLAGS="${CXXFLAGS/-O2/}"
+  make "${_makeflags[@]}" TILES=0 SOUND=0 cataclysm
+  make "${_makeflags[@]}" TILES=1 SOUND=1 cataclysm-tiles
+}
+
+package() {
+  cd "${_reponame}"
+  # Data, tiles binary, desktop file, icon, metainfo.
+  make "${_makeflags[@]}" TILES=1 SOUND=1 DESTDIR="${pkgdir}" install
+  install -Dm755 cataclysm "${pkgdir}/usr/bin/cataclysm"
+
+  # Co-op test client.
+  install -Dm755 tools/mp/mp_probe.py "${pkgdir}/usr/bin/cataclysm-mp-probe"
+
+  # Shell completions.
+  install -Dm644 packaging/completions/cataclysm.bash \
+    "${pkgdir}/usr/share/bash-completion/completions/cataclysm"
+  ln -s cataclysm "${pkgdir}/usr/share/bash-completion/completions/cataclysm-tiles"
+  install -Dm644 packaging/completions/_cataclysm \
+    "${pkgdir}/usr/share/zsh/site-functions/_cataclysm"
+  install -Dm644 packaging/completions/cataclysm.fish \
+    "${pkgdir}/usr/share/fish/vendor_completions.d/cataclysm.fish"
+  install -Dm644 packaging/completions/cataclysm.fish \
+    "${pkgdir}/usr/share/fish/vendor_completions.d/cataclysm-tiles.fish"
+
+  # Docs and license.
+  install -Dm644 doc/c++/MULTIPLAYER.md "${pkgdir}/usr/share/doc/${pkgname}/MULTIPLAYER.md"
+  install -Dm644 README.md "${pkgdir}/usr/share/doc/${pkgname}/README.md"
+  install -Dm644 LICENSE.txt "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE.txt"
+}

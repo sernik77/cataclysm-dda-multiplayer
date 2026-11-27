@@ -1,0 +1,39 @@
+#compdef cataclysm cataclysm-tiles
+# zsh completion for cataclysm and cataclysm-tiles
+
+_cataclysm_worlds() {
+    local saves="${XDG_DATA_HOME:-$HOME/.local/share}/cataclysm-dda/save"
+    local -a worlds
+    [[ -d $saves ]] && worlds=( ${saves}/*(/:t) )
+    _describe 'world' worlds
+}
+
+_arguments -s \
+    '--help[show help and exit]' \
+    '--seed[random number generator seed]:seed:' \
+    '--jsonverify[check all JSON data and exit]' \
+    '--check-mods[check the given mods and exit]:*:mod:' \
+    '--noverify[skip JSON verification]' \
+    '--world[load the first save in this world]:world:_cataclysm_worlds' \
+    '--basepath[base path for all game data]:path:_directories' \
+    '--shared[map-sharing mode]' \
+    '--username[map-sharing user name]:name:' \
+    '--addadmin[map-sharing admin]:user:' \
+    '--adddebugger[map-sharing debugger]:user:' \
+    '--competitive[map-sharing competitive mode]' \
+    '--worldmenu[map-sharing world menu]' \
+    '--userdir[base path for user files]:path:_directories' \
+    '--datadir[data directory]:path:_directories' \
+    '--savedir[save directory]:path:_directories' \
+    '--configdir[config directory]:path:_directories' \
+    '--memorialdir[memorial directory]:path:_directories' \
+    '--optionfile[options file]:file:_files' \
+    '--keymapfile[keymap file]:file:_files' \
+    '--autopickupfile[auto-pickup file]:file:_files' \
+    '--motdfile[message of the day file]:file:_files' \
+    '--disable-ascii-art[no ASCII art in menus]' \
+    '--mp-host[host a co-op game on this TCP port]:port:(7777)' \
+    '--mp-password[password for joining players]:secret:' \
+    '--mp-pace[explore mode: longest wait per turn (ms)]:ms:(100 250 500)' \
+    '--mp-grace[tactical mode: wait before an idle player auto-pauses (ms)]:ms:(10000 30000 60000)' \
+    '--mp-loopback[accept co-op players from this computer only]'

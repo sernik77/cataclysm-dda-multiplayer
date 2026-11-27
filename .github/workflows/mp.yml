@@ -52,6 +52,24 @@ jobs:
       - name: Probe client syntax
         run: python3 -I -m py_compile tools/mp/mp_probe.py
 
+  nix:
+    name: Nix flake (check + curses build)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - uses: cachix/install-nix-action@v31
+      - name: Flake check
+        run: nix flake check --no-build
+      - name: Build curses package
+        run: nix build .#curses -L --max-jobs auto
+      - name: Smoke test the package
+        run: |
+          ./result/bin/cataclysm --help | head -n 5
+          ./result/bin/cataclysm-mp-probe --help | head -n 3
+
   windows:
     name: Windows native transport (MSVC)
     runs-on: windows-latest
