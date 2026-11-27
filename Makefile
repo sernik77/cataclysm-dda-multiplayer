@@ -949,6 +949,8 @@ endif
 # Global settings for Windows targets (at end)
 ifeq ($(TARGETSYSTEM),WINDOWS)
   LDFLAGS += -lgdi32 -lwinmm -limm32 -lole32 -loleaut32 -lversion -lWindowsApp -lmincore -lBcrypt
+  # Multiplayer transport (src/mp_transport.cpp)
+  LDFLAGS += -lws2_32
   ifeq ($(BACKTRACE),1)
     LDFLAGS += -ldbghelp
   endif

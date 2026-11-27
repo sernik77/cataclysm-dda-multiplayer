@@ -7,14 +7,14 @@
 #include <optional>
 #include <string>
 
-#include "mp_protocol.h"
+#include "mp_framing.h"
 
 // Multiplayer TCP transport. Non-blocking sockets, polled from the main
 // thread; the game is single-threaded, so nothing here takes a lock.
 //
-// Implemented with POSIX sockets. On platforms without them (Windows,
-// Emscripten) every operation fails with an "unsupported" error, so the game
-// still builds and single player is unaffected.
+// Implemented with POSIX sockets and with Winsock 2 on Windows. On Emscripten
+// every operation fails with an "unsupported" error, so the game still
+// builds and single player is unaffected.
 namespace mp
 {
 
@@ -24,7 +24,7 @@ bool transport_supported();
 class connection
 {
     public:
-        explicit connection( int fd, std::string peer );
+        explicit connection( std::intptr_t fd, std::string peer );
         ~connection();
         connection( const connection & ) = delete;
         connection &operator=( const connection & ) = delete;
@@ -35,8 +35,8 @@ class connection
         const std::string &peer() const {
             return peer_;
         }
-        // OS socket descriptor, -1 when closed. For polling only.
-        int native_handle() const {
+        // OS socket handle (a SOCKET on Windows), -1 when closed.
+        std::intptr_t native_handle() const {
             return fd_;
         }
         // Why the connection closed; empty while open.
@@ -65,7 +65,7 @@ class connection
         static constexpr size_t max_output_bytes = 64U * 1024U * 1024U;
 
     private:
-        int fd_;
+        std::intptr_t fd_;
         std::string peer_;
         std::string close_reason_;
         frame_decoder in_;
@@ -91,14 +91,14 @@ class listener
         std::uint16_t port() const {
             return port_;
         }
-        int native_handle() const {
+        std::intptr_t native_handle() const {
             return fd_;
         }
         // Accepts one pending client, if any. Never blocks.
         std::unique_ptr<connection> accept();
 
     private:
-        int fd_ = -1;
+        std::intptr_t fd_ = -1;
         std::uint16_t port_ = 0;
 };
 
