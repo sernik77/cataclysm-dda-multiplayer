@@ -303,6 +303,14 @@ not encrypted.
   does not update. The wait is limited by `--mp-grace`.
 * Player bindings (uuid to character) are kept in memory only. After the host
   restarts the game, a returning player gets a new character.
+* A disconnected player's puppet keeps a permanent `npc_suspend` effect, and
+  effects are saved. If the host saves and quits, that NPC stays inert in the
+  save. Remove the effect in the debug menu, or wait for persistent bindings
+  (milestone 5).
+* A remote player sees only the `self` status (position, hp, moves). There is
+  no map, creature list or message log on the client yet, so this is a working
+  host plus a protocol probe, not playable co-op. The client mirror is
+  milestone 4.
 
 ## License
 
