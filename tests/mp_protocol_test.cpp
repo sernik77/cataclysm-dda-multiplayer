@@ -203,7 +203,8 @@ TEST_CASE( "mp_hello_validation", "[mp][nogame]" )
     CHECK( mp::check_hello( bad, "v1", "m" ).has_value() );
     bad = h;
     bad.mods_hash = "other";
-    CHECK( mp::check_hello( bad, "v1", "m" ) == std::optional<std::string>( "mod list mismatch: host m" ) );
+    CHECK( mp::check_hello( bad, "v1",
+                            "m" ) == std::optional<std::string>( "mod list mismatch: host m" ) );
     bad = h;
     bad.name = "   ";
     CHECK( mp::check_hello( bad, "v1", "m" ).has_value() );

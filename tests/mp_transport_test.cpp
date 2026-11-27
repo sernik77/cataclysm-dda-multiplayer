@@ -92,7 +92,8 @@ TEST_CASE( "mp_transport_loopback_handshake", "[mp][nogame]" )
     CHECK( w2.id == 2 );
 
     // A large message (a submap snapshot is tens of KiB) arrives whole.
-    const std::string big = "{\"t\":\"chat\",\"from\":2,\"text\":\"" + std::string( 300000, 'z' ) + "\"}";
+    const std::string big = "{\"t\":\"chat\",\"from\":2,\"text\":\"" + std::string( 300000,
+                            'z' ) + "\"}";
     REQUIRE( server->send( big ) );
     got = receive( *client, *server );
     REQUIRE( got );

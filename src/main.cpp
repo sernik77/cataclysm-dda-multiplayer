@@ -490,7 +490,7 @@ cli_opts parse_commandline( int argc, const char **argv )
                 1,
                 [&result]( int, const char **params ) -> int {
                     result.mp.sched.tactical_grace_ms = parse_positive_flag( "--mp-grace", params[0],
-                                                       3600000 );
+                            3600000 );
                     return 1;
                 }
             },
