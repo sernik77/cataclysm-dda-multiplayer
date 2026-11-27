@@ -1,0 +1,109 @@
+name: Multiplayer Windows build
+
+# Builds the full Windows game (MSVC, vcpkg, static), runs the multiplayer
+# tests natively on Windows, and uploads a ready-to-run zip with the .exe.
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+concurrency:
+  group: mp-windows-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  VCPKG_OVERLAY_TRIPLETS: ${{ github.workspace }}\.github\vcpkg_triplets
+
+jobs:
+  windows-exe:
+    name: Windows .exe (MSVC x64) + [mp] tests
+    runs-on: windows-2022
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Setup msys2 (translations)
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: mingw64
+          install: >-
+            gettext
+            make
+
+      - uses: microsoft/setup-msbuild@v2
+
+      - name: Use GNU tar for the cache action
+        shell: cmd
+        run: echo C:\Program Files\Git\usr\bin>>"%GITHUB_PATH%"
+
+      - uses: lukka/get-cmake@latest
+        with:
+          cmakeVersion: 3.31.6
+
+      - name: Install vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgDirectory: '${{ runner.workspace }}/b/vcpkg'
+          # Same pin as upstream's Windows build.
+          vcpkgGitCommitId: 'f6672d8e480ccdecddfad3fd1b838ba369ffe6cd'
+
+      - name: Integrate vcpkg
+        run: vcpkg integrate install --vcpkg-root "$env:RUNNER_WORKSPACE\b\vcpkg"
+        env:
+          RUNNER_WORKSPACE: ${{ runner.workspace }}
+
+      - name: Cache vcpkg packages
+        uses: actions/cache@v4
+        with:
+          path: msvc-full-features/vcpkg_installed
+          key: mp-vcpkg-${{ hashFiles('msvc-full-features/vcpkg.json', '.github/vcpkg_triplets/x64-windows-static.cmake') }}
+
+      - name: Keep intermediates on the fast drive
+        run: |
+          mkdir -p "$env:TEMP\objwin"
+          New-Item -ItemType SymbolicLink -Target "$env:TEMP\objwin" objwin
+
+      - name: Build game, tests and tools
+        env:
+          CDDA_RELEASE_BUILD: 1
+        run: >
+          msbuild -m -p:Configuration=Release -p:Platform=x64
+          "-target:Cataclysm-vcpkg-static;Cataclysm-test-vcpkg-static;JsonFormatter-vcpkg-static;zzip"
+          msvc-full-features\Cataclysm-vcpkg-static.sln
+
+      - name: Multiplayer tests (native Windows)
+        run: .\Cataclysm-test-vcpkg-static-Release-x64.exe --rng-seed time "[mp]"
+
+      - name: Compile translations
+        shell: msys2 {0}
+        run: make -C lang -j"$NUMBER_OF_PROCESSORS"
+
+      - name: VERSION.txt
+        shell: bash
+        run: |
+          cat > VERSION.txt <<EOL
+          build type: windows-tiles-x64-msvc (co-op fork)
+          commit sha: ${{ github.sha }}
+          commit url: https://github.com/${{ github.repository }}/commit/${{ github.sha }}
+          EOL
+
+      - name: Package
+        run: |
+          .\build-scripts\windist.ps1
+          # Co-op test client and docs.
+          mkdir bindist\tools\mp -Force | Out-Null
+          cp tools\mp\mp_probe.py bindist\tools\mp\
+          Compress-Archive -Force -Path bindist/* -DestinationPath cdda-mp-windows-x64.zip
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: cdda-mp-windows
+          path: cdda-mp-windows-x64.zip
+          if-no-files-found: error
+          retention-days: 30
